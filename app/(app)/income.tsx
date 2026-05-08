@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import {
   View, Text, SafeAreaView, FlatList, TouchableOpacity,
-  TextInput, RefreshControl, StyleSheet, Alert,
+  TextInput, RefreshControl, StyleSheet, Alert, ScrollView,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useIncome } from '../../hooks/useIncome';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { IncomeForm } from '../../components/forms/IncomeForm';
@@ -10,9 +12,9 @@ import { SwipeableRow } from '../../components/ui/SwipeableRow';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { INCOME_CATEGORY_ICONS, getIncomeCategoryConfig } from '../../lib/incomeCategories';
+import { INCOME_CATEGORY_ICONS, getIncomeCategoryConfig, INCOME_CATEGORIES } from '../../lib/incomeCategories';
 import { formatDate } from '../../lib/utils';
-import type { Income, IncomeFormData } from '../../lib/types';
+import type { Income, IncomeFormData, IncomeCategory } from '../../lib/types';
 
 const SORT_OPTIONS = ['Date ↓', 'Date ↑', 'Amount ↓', 'Amount ↑'];
 
@@ -22,9 +24,14 @@ export default function IncomeScreen() {
 
   const [search, setSearch] = useState('');
   const [sortIdx, setSortIdx] = useState(0);
+  const [categoryFilter, setCategoryFilter] = useState<IncomeCategory | 'All'>('All');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -43,6 +50,9 @@ export default function IncomeScreen() {
         (e.tags ?? []).some(t => t.includes(q))
       );
     }
+    if (categoryFilter !== 'All') list = list.filter(e => e.category === categoryFilter);
+    if (dateFrom) list = list.filter(e => e.date >= dateFrom);
+    if (dateTo) list = list.filter(e => e.date <= dateTo);
     switch (sortIdx) {
       case 0: list.sort((a, b) => b.date.localeCompare(a.date)); break;
       case 1: list.sort((a, b) => a.date.localeCompare(b.date)); break;
@@ -50,111 +60,140 @@ export default function IncomeScreen() {
       case 3: list.sort((a, b) => a.amount - b.amount); break;
     }
     return list;
-  }, [income, search, sortIdx]);
+  }, [income, search, sortIdx, categoryFilter, dateFrom, dateTo]);
 
-  async function onRefresh() {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+  const hasActiveFilters = categoryFilter !== 'All' || dateFrom || dateTo;
+
+  async function exportCSV() {
+    if (filtered.length === 0) { Alert.alert('Nothing to export'); return; }
+    const header = 'Date,Description,Category,Amount,Employer,Gross,Tax Withheld,Super,Tags';
+    const rows = filtered.map(e =>
+      `${e.date},"${e.description.replace(/"/g, '""')}","${e.category}",${e.amount.toFixed(2)},"${e.employer ?? ''}",${e.grossAmount ?? ''},${e.taxWithheld ?? ''},${e.superannuation ?? ''},"${(e.tags ?? []).join(';')}"`
+    );
+    const csv = [header, ...rows].join('\n');
+    const path = FileSystem.cacheDirectory + `income-${Date.now()}.csv`;
+    await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export Income' });
+    } else {
+      Alert.alert('Sharing not available on this device');
+    }
   }
 
   async function handleSave(data: IncomeFormData) {
     const payload = {
-      date: data.date,
-      amount: parseFloat(data.amount),
-      category: data.category,
-      description: data.description,
-      employer: data.employer,
+      date: data.date, amount: parseFloat(data.amount), category: data.category,
+      description: data.description, employer: data.employer,
       grossAmount: data.grossAmount ? parseFloat(data.grossAmount) : undefined,
       taxWithheld: data.taxWithheld ? parseFloat(data.taxWithheld) : undefined,
       superannuation: data.superannuation ? parseFloat(data.superannuation) : undefined,
-      tags: data.tags,
-      attachment: data.attachment,
-      accountId: data.accountId,
-      memberId: data.memberId,
+      tags: data.tags, attachment: data.attachment, accountId: data.accountId, memberId: data.memberId,
     };
-    if (editingIncome) {
-      await updateIncome(editingIncome.id, payload as any);
-    } else {
-      await addIncome(payload as any);
-    }
+    if (editingIncome) await updateIncome(editingIncome.id, payload as any);
+    else await addIncome(payload as any);
   }
 
-  function handleEdit(item: Income) {
-    setEditingIncome(item);
-    setShowForm(true);
-  }
+  function handleEdit(item: Income) { setEditingIncome(item); setShowForm(true); }
 
   function handleDelete(item: Income) {
-    Alert.alert(
-      'Delete Income',
-      `Delete "${item.description}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteIncome(item.id) },
-      ]
-    );
+    Alert.alert('Delete Income', `Delete "${item.description}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteIncome(item.id) },
+    ]);
   }
 
-  function openAdd() {
-    setEditingIncome(null);
-    setShowForm(true);
-  }
+  function openAdd() { setEditingIncome(null); setShowForm(true); }
 
   if (!isLoaded) return <LoadingSpinner />;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Income</Text>
-          <Text style={styles.headerSub}>This month: {formatCurrency(monthTotal)}</Text>
+          <Text style={styles.headerSub}>
+            {filtered.length}/{income.length} · {formatCurrency(monthTotal)} this month
+          </Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={exportCSV}>
+            <Text style={styles.iconBtnText}>↓CSV</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+            <Text style={styles.addBtnText}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.filterRow}>
+        <TextInput
+          style={styles.searchInput} value={search} onChangeText={setSearch}
+          placeholder="Search income..." placeholderTextColor="#475569"
+        />
+        <TouchableOpacity style={styles.sortBtn} onPress={() => setSortIdx((sortIdx + 1) % SORT_OPTIONS.length)}>
+          <Text style={styles.sortText}>{SORT_OPTIONS[sortIdx]}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterToggleBtn, hasActiveFilters && styles.filterToggleBtnActive]}
+          onPress={() => setShowFilters(f => !f)}
+        >
+          <Text style={[styles.filterToggleText, hasActiveFilters && styles.filterToggleTextActive]}>⚙</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Search + Sort */}
-      <View style={styles.filterRow}>
-        <TextInput
-          style={styles.searchInput}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search income..."
-          placeholderTextColor="#475569"
-        />
-        <TouchableOpacity
-          style={styles.sortBtn}
-          onPress={() => setSortIdx((sortIdx + 1) % SORT_OPTIONS.length)}
-        >
-          <Text style={styles.sortText}>{SORT_OPTIONS[sortIdx]}</Text>
-        </TouchableOpacity>
-      </View>
+      {showFilters && (
+        <View style={styles.filterPanel}>
+          <Text style={styles.filterLabel}>Category</Text>
+          <TouchableOpacity style={styles.filterSelect} onPress={() => setShowCategoryPicker(p => !p)}>
+            <Text style={styles.filterSelectText}>{categoryFilter}</Text>
+            <Text style={styles.chevron}>▼</Text>
+          </TouchableOpacity>
+          {showCategoryPicker && (
+            <View style={styles.filterDropdown}>
+              {(['All', ...INCOME_CATEGORIES.map(c => c.name)] as (IncomeCategory | 'All')[]).map(cat => (
+                <TouchableOpacity key={cat} style={styles.filterDropdownItem}
+                  onPress={() => { setCategoryFilter(cat); setShowCategoryPicker(false); }}>
+                  <Text style={[styles.filterDropdownText, categoryFilter === cat && { color: '#34D399' }]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.filterLabel}>From</Text>
+              <TextInput style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom}
+                placeholder="YYYY-MM-DD" placeholderTextColor="#475569" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.filterLabel}>To</Text>
+              <TextInput style={styles.dateInput} value={dateTo} onChangeText={setDateTo}
+                placeholder="YYYY-MM-DD" placeholderTextColor="#475569" />
+            </View>
+          </View>
+          {hasActiveFilters && (
+            <TouchableOpacity style={styles.clearBtn} onPress={() => { setCategoryFilter('All'); setDateFrom(''); setDateTo(''); }}>
+              <Text style={styles.clearBtnText}>Clear filters</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setTimeout(() => setRefreshing(false), 800); }} tintColor="#10B981" />}
         contentContainerStyle={filtered.length === 0 ? styles.emptyContainer : styles.listContent}
         ListEmptyComponent={
-          <EmptyState
-            icon="💼"
-            title="No income yet"
-            subtitle="Tap '+ Add' to record your first income"
-            actionTitle="Add Income"
-            onAction={openAdd}
-          />
+          <EmptyState icon="💼" title="No income yet" subtitle="Tap '+ Add' to record your first income"
+            actionTitle="Add Income" onAction={openAdd} />
         }
         renderItem={({ item }) => {
           const cat = getIncomeCategoryConfig(item.category);
           return (
-            <SwipeableRow
-              rightActions={[
-                { label: 'Edit', color: '#4F46E5', onPress: () => handleEdit(item), icon: '✏️' },
-                { label: 'Delete', color: '#DC2626', onPress: () => handleDelete(item), icon: '🗑️' },
-              ]}
-            >
+            <SwipeableRow rightActions={[
+              { label: 'Edit', color: '#4F46E5', onPress: () => handleEdit(item), icon: '✏️' },
+              { label: 'Delete', color: '#DC2626', onPress: () => handleDelete(item), icon: '🗑️' },
+            ]}>
               <TouchableOpacity style={styles.card} onPress={() => handleEdit(item)} activeOpacity={0.7}>
                 <View style={[styles.catIcon, { backgroundColor: cat.color + '22' }]}>
                   <Text style={styles.catIconText}>{INCOME_CATEGORY_ICONS[item.category]}</Text>
@@ -187,7 +226,6 @@ export default function IncomeScreen() {
         }}
       />
 
-      {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={openAdd}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
@@ -197,18 +235,14 @@ export default function IncomeScreen() {
         onClose={() => { setShowForm(false); setEditingIncome(null); }}
         onSave={handleSave}
         initial={editingIncome ? {
-          date: editingIncome.date,
-          amount: String(editingIncome.amount),
-          category: editingIncome.category,
-          description: editingIncome.description,
+          date: editingIncome.date, amount: String(editingIncome.amount),
+          category: editingIncome.category, description: editingIncome.description,
           employer: editingIncome.employer,
           grossAmount: editingIncome.grossAmount ? String(editingIncome.grossAmount) : undefined,
           taxWithheld: editingIncome.taxWithheld ? String(editingIncome.taxWithheld) : undefined,
           superannuation: editingIncome.superannuation ? String(editingIncome.superannuation) : undefined,
-          tags: editingIncome.tags ?? [],
-          attachment: editingIncome.attachment,
-          accountId: editingIncome.accountId,
-          memberId: editingIncome.memberId,
+          tags: editingIncome.tags ?? [], attachment: editingIncome.attachment,
+          accountId: editingIncome.accountId, memberId: editingIncome.memberId,
         } : undefined}
         incomeId={editingIncome?.id}
       />
@@ -217,168 +251,63 @@ export default function IncomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-  },
+  container: { flex: 1, backgroundColor: '#0F172A' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: 'white',
-  },
-  headerSub: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  addBtn: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  addBtnText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: 'white' },
+  headerSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  iconBtn: { backgroundColor: '#1E293B', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#334155' },
+  iconBtnText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  addBtn: { backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  addBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
+  filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
   searchInput: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    color: 'white',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    flex: 1, backgroundColor: '#1E293B', borderRadius: 10, borderWidth: 1, borderColor: '#334155',
+    color: 'white', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
   },
-  sortBtn: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-  sortText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  emptyContainer: {
-    flex: 1,
-  },
+  sortBtn: { backgroundColor: '#1E293B', borderRadius: 10, borderWidth: 1, borderColor: '#334155', paddingHorizontal: 12, justifyContent: 'center' },
+  sortText: { color: '#94A3B8', fontSize: 12, fontWeight: '500' },
+  filterToggleBtn: { backgroundColor: '#1E293B', borderRadius: 10, borderWidth: 1, borderColor: '#334155', width: 40, alignItems: 'center', justifyContent: 'center' },
+  filterToggleBtnActive: { backgroundColor: '#10B98122', borderColor: '#10B981' },
+  filterToggleText: { color: '#94A3B8', fontSize: 16 },
+  filterToggleTextActive: { color: '#34D399' },
+  filterPanel: { marginHorizontal: 16, marginBottom: 10, backgroundColor: '#1E293B', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#334155' },
+  filterLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '600', marginBottom: 5, marginTop: 4 },
+  filterSelect: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0F172A', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#334155' },
+  filterSelectText: { color: 'white', fontSize: 13 },
+  chevron: { color: '#475569', fontSize: 10 },
+  filterDropdown: { backgroundColor: '#0F172A', borderRadius: 8, borderWidth: 1, borderColor: '#334155', marginTop: 4, overflow: 'hidden' },
+  filterDropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#1E293B' },
+  filterDropdownText: { color: '#94A3B8', fontSize: 13 },
+  dateRow: { flexDirection: 'row', gap: 8 },
+  dateInput: { backgroundColor: '#0F172A', borderRadius: 8, borderWidth: 1, borderColor: '#334155', color: 'white', paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
+  clearBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#DC262622', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  clearBtnText: { color: '#F87171', fontSize: 12, fontWeight: '600' },
+  listContent: { paddingHorizontal: 16, paddingBottom: 100 },
+  emptyContainer: { flex: 1 },
   card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    gap: 12,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#1E293B',
+    borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#334155', gap: 12,
   },
-  catIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  catIconText: {
-    fontSize: 20,
-  },
-  cardBody: {
-    flex: 1,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  cardDesc: {
-    flex: 1,
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  cardAmount: {
-    color: '#34D399',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  cardDate: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  employer: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 6,
-  },
-  tag: {
-    backgroundColor: '#334155',
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  tagText: {
-    color: '#94A3B8',
-    fontSize: 11,
-  },
+  catIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  catIconText: { fontSize: 20 },
+  cardBody: { flex: 1 },
+  cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
+  cardDesc: { flex: 1, color: 'white', fontSize: 15, fontWeight: '600', marginRight: 8 },
+  cardAmount: { color: '#34D399', fontSize: 15, fontWeight: '700' },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  cardDate: { color: '#64748B', fontSize: 12 },
+  employer: { color: '#64748B', fontSize: 12 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 },
+  tag: { backgroundColor: '#334155', borderRadius: 100, paddingHorizontal: 8, paddingVertical: 2 },
+  tagText: { color: '#94A3B8', fontSize: 11 },
   fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
+    position: 'absolute', bottom: 24, right: 20, width: 56, height: 56,
+    borderRadius: 28, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8,
   },
-  fabText: {
-    color: 'white',
-    fontSize: 28,
-    fontWeight: '300',
-    marginTop: -2,
-  },
+  fabText: { color: 'white', fontSize: 28, fontWeight: '300', marginTop: -2 },
 });

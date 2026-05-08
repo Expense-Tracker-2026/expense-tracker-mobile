@@ -30,6 +30,8 @@ export default function AppLayout() {
       <Tabs.Screen name="savings" options={{ title: 'Savings', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🏦</Text> }} />
       <Tabs.Screen name="accounts" options={{ title: 'Accounts', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>💳</Text> }} />
       <Tabs.Screen name="tax" options={{ title: 'Tax', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>📋</Text> }} />
+      <Tabs.Screen name="loans" options={{ title: 'Loans', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🤝</Text> }} />
+      <Tabs.Screen name="trips" options={{ title: 'Trips', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>✈️</Text> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>👤</Text> }} />
       <Tabs.Screen name="family" options={{ href: null }} />
       <Tabs.Screen name="subscription" options={{ href: null }} />

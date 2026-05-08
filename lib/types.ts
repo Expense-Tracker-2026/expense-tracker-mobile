@@ -196,3 +196,72 @@ export interface IncomeFilterState {
   sortBy: 'date' | 'amount';
   sortOrder: 'asc' | 'desc';
 }
+
+// ── Loans ────────────────────────────────────────────────
+
+export type LoanType = 'borrowed' | 'lent';
+export type LoanStatus = 'active' | 'paid_off' | 'defaulted';
+
+export interface LoanPayment {
+  id: string;
+  date: string;
+  amount: number;
+  note?: string;
+}
+
+export interface Loan {
+  id: string;
+  type: LoanType;
+  name: string;
+  principalAmount: number;
+  interestRate: number;
+  startDate: string;
+  dueDate?: string;
+  status: LoanStatus;
+  payments: LoanPayment[];
+  accountId?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Trips ────────────────────────────────────────────────
+
+export type TripStatus = 'planning' | 'ongoing' | 'completed';
+
+export type TripExpenseCategory =
+  | 'Accommodation'
+  | 'Flights'
+  | 'Transport'
+  | 'Food & Dining'
+  | 'Activities'
+  | 'Shopping'
+  | 'Insurance'
+  | 'Visa & Fees'
+  | 'Other';
+
+export interface TripExpense {
+  id: string;
+  category: TripExpenseCategory;
+  description: string;
+  plannedAmount: number;
+  actualAmount?: number;
+  date?: string;
+  paid: boolean;
+}
+
+export interface Trip {
+  id: string;
+  name: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  currency: string;
+  totalBudget: number;
+  status: TripStatus;
+  coverColor: string;
+  notes?: string;
+  expenses: TripExpense[];
+  createdAt: string;
+  updatedAt: string;
+}

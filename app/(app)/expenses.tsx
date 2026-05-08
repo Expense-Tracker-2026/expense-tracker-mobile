@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import {
   View, Text, SafeAreaView, FlatList, TouchableOpacity,
-  TextInput, RefreshControl, StyleSheet, Alert,
+  TextInput, RefreshControl, StyleSheet, Alert, ScrollView,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { ExpenseForm } from '../../components/forms/ExpenseForm';
@@ -10,7 +12,7 @@ import { SwipeableRow } from '../../components/ui/SwipeableRow';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { CATEGORY_ICONS, getCategoryConfig } from '../../lib/categories';
+import { CATEGORY_ICONS, getCategoryConfig, CATEGORIES } from '../../lib/categories';
 import { formatDate } from '../../lib/utils';
 import type { Expense, ExpenseFormData, Category } from '../../lib/types';
 
@@ -22,9 +24,14 @@ export default function ExpensesScreen() {
 
   const [search, setSearch] = useState('');
   const [sortIdx, setSortIdx] = useState(0);
+  const [categoryFilter, setCategoryFilter] = useState<Category | 'All'>('All');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -42,6 +49,11 @@ export default function ExpensesScreen() {
         (e.tags ?? []).some(t => t.includes(q))
       );
     }
+    if (categoryFilter !== 'All') {
+      list = list.filter(e => e.category === categoryFilter);
+    }
+    if (dateFrom) list = list.filter(e => e.date >= dateFrom);
+    if (dateTo) list = list.filter(e => e.date <= dateTo);
     switch (sortIdx) {
       case 0: list.sort((a, b) => b.date.localeCompare(a.date)); break;
       case 1: list.sort((a, b) => a.date.localeCompare(b.date)); break;
@@ -49,56 +61,49 @@ export default function ExpensesScreen() {
       case 3: list.sort((a, b) => a.amount - b.amount); break;
     }
     return list;
-  }, [expenses, search, sortIdx]);
+  }, [expenses, search, sortIdx, categoryFilter, dateFrom, dateTo]);
 
-  async function onRefresh() {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+  const hasActiveFilters = categoryFilter !== 'All' || dateFrom || dateTo;
+
+  async function exportCSV() {
+    if (filtered.length === 0) { Alert.alert('Nothing to export'); return; }
+    const header = 'Date,Description,Category,Amount,Tags,Tax Deductible,Account';
+    const rows = filtered.map(e =>
+      `${e.date},"${e.description.replace(/"/g, '""')}","${e.category}",${e.amount.toFixed(2)},"${(e.tags ?? []).join(';')}",${e.isTaxDeductible ? 'Yes' : 'No'},${e.accountId ?? ''}`
+    );
+    const csv = [header, ...rows].join('\n');
+    const path = FileSystem.cacheDirectory + `expenses-${Date.now()}.csv`;
+    await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export Expenses' });
+    } else {
+      Alert.alert('Sharing not available on this device');
+    }
   }
 
   async function handleSave(data: ExpenseFormData) {
     const payload = {
-      date: data.date,
-      amount: parseFloat(data.amount),
-      category: data.category,
-      description: data.description,
-      tags: data.tags,
-      attachment: data.attachment,
-      accountId: data.accountId,
-      isTaxDeductible: data.isTaxDeductible,
-      taxDeductionCategory: data.taxDeductionCategory,
-      deductiblePercentage: data.deductiblePercentage,
-      taxRelatedEmployer: data.taxRelatedEmployer,
-      taxDeductionReason: data.taxDeductionReason,
+      date: data.date, amount: parseFloat(data.amount), category: data.category,
+      description: data.description, tags: data.tags, attachment: data.attachment,
+      accountId: data.accountId, isTaxDeductible: data.isTaxDeductible,
+      taxDeductionCategory: data.taxDeductionCategory, deductiblePercentage: data.deductiblePercentage,
+      taxRelatedEmployer: data.taxRelatedEmployer, taxDeductionReason: data.taxDeductionReason,
       memberId: data.memberId,
     };
-    if (editingExpense) {
-      await updateExpense(editingExpense.id, payload as any);
-    } else {
-      await addExpense(payload as any);
-    }
+    if (editingExpense) await updateExpense(editingExpense.id, payload as any);
+    else await addExpense(payload as any);
   }
 
-  function handleEdit(expense: Expense) {
-    setEditingExpense(expense);
-    setShowForm(true);
-  }
+  function handleEdit(expense: Expense) { setEditingExpense(expense); setShowForm(true); }
 
   function handleDelete(expense: Expense) {
-    Alert.alert(
-      'Delete Expense',
-      `Delete "${expense.description}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteExpense(expense.id) },
-      ]
-    );
+    Alert.alert('Delete Expense', `Delete "${expense.description}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteExpense(expense.id) },
+    ]);
   }
 
-  function openAdd() {
-    setEditingExpense(null);
-    setShowForm(true);
-  }
+  function openAdd() { setEditingExpense(null); setShowForm(true); }
 
   if (!isLoaded) return <LoadingSpinner />;
 
@@ -108,53 +113,93 @@ export default function ExpensesScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Expenses</Text>
-          <Text style={styles.headerSub}>This month: {formatCurrency(monthTotal)}</Text>
+          <Text style={styles.headerSub}>
+            {filtered.length}/{expenses.length} · {formatCurrency(monthTotal)} this month
+          </Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={exportCSV}>
+            <Text style={styles.iconBtnText}>↓CSV</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+            <Text style={styles.addBtnText}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Search + Sort + Filter toggle */}
+      <View style={styles.filterRow}>
+        <TextInput
+          style={styles.searchInput} value={search} onChangeText={setSearch}
+          placeholder="Search expenses..." placeholderTextColor="#475569"
+        />
+        <TouchableOpacity style={styles.sortBtn} onPress={() => setSortIdx((sortIdx + 1) % SORT_OPTIONS.length)}>
+          <Text style={styles.sortText}>{SORT_OPTIONS[sortIdx]}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterToggleBtn, hasActiveFilters && styles.filterToggleBtnActive]}
+          onPress={() => setShowFilters(f => !f)}
+        >
+          <Text style={[styles.filterToggleText, hasActiveFilters && styles.filterToggleTextActive]}>⚙</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Search + Sort */}
-      <View style={styles.filterRow}>
-        <TextInput
-          style={styles.searchInput}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search expenses..."
-          placeholderTextColor="#475569"
-        />
-        <TouchableOpacity
-          style={styles.sortBtn}
-          onPress={() => setSortIdx((sortIdx + 1) % SORT_OPTIONS.length)}
-        >
-          <Text style={styles.sortText}>{SORT_OPTIONS[sortIdx]}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Expanded filter panel */}
+      {showFilters && (
+        <View style={styles.filterPanel}>
+          <Text style={styles.filterLabel}>Category</Text>
+          <TouchableOpacity style={styles.filterSelect} onPress={() => setShowCategoryPicker(p => !p)}>
+            <Text style={styles.filterSelectText}>{categoryFilter}</Text>
+            <Text style={styles.chevron}>▼</Text>
+          </TouchableOpacity>
+          {showCategoryPicker && (
+            <View style={styles.filterDropdown}>
+              <ScrollView style={{ maxHeight: 200 }}>
+                {(['All', ...CATEGORIES.map(c => c.name)] as (Category | 'All')[]).map(cat => (
+                  <TouchableOpacity key={cat} style={styles.filterDropdownItem}
+                    onPress={() => { setCategoryFilter(cat); setShowCategoryPicker(false); }}>
+                    <Text style={[styles.filterDropdownText, categoryFilter === cat && { color: '#A78BFA' }]}>{cat}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.filterLabel}>From</Text>
+              <TextInput style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom}
+                placeholder="YYYY-MM-DD" placeholderTextColor="#475569" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.filterLabel}>To</Text>
+              <TextInput style={styles.dateInput} value={dateTo} onChangeText={setDateTo}
+                placeholder="YYYY-MM-DD" placeholderTextColor="#475569" />
+            </View>
+          </View>
+          {hasActiveFilters && (
+            <TouchableOpacity style={styles.clearBtn} onPress={() => { setCategoryFilter('All'); setDateFrom(''); setDateTo(''); }}>
+              <Text style={styles.clearBtnText}>Clear filters</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7C3AED" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setTimeout(() => setRefreshing(false), 800); }} tintColor="#7C3AED" />}
         contentContainerStyle={filtered.length === 0 ? styles.emptyContainer : styles.listContent}
         ListEmptyComponent={
-          <EmptyState
-            icon="💸"
-            title="No expenses yet"
-            subtitle="Tap '+ Add' to record your first expense"
-            actionTitle="Add Expense"
-            onAction={openAdd}
-          />
+          <EmptyState icon="💸" title="No expenses" subtitle="Tap '+ Add' to record your first expense"
+            actionTitle="Add Expense" onAction={openAdd} />
         }
         renderItem={({ item }) => {
           const cat = getCategoryConfig(item.category);
           return (
-            <SwipeableRow
-              rightActions={[
-                { label: 'Edit', color: '#4F46E5', onPress: () => handleEdit(item), icon: '✏️' },
-                { label: 'Delete', color: '#DC2626', onPress: () => handleDelete(item), icon: '🗑️' },
-              ]}
-            >
+            <SwipeableRow rightActions={[
+              { label: 'Edit', color: '#4F46E5', onPress: () => handleEdit(item), icon: '✏️' },
+              { label: 'Delete', color: '#DC2626', onPress: () => handleDelete(item), icon: '🗑️' },
+            ]}>
               <TouchableOpacity style={styles.card} onPress={() => handleEdit(item)} activeOpacity={0.7}>
                 <View style={[styles.catIcon, { backgroundColor: cat.color + '22' }]}>
                   <Text style={styles.catIconText}>{CATEGORY_ICONS[item.category]}</Text>
@@ -186,7 +231,6 @@ export default function ExpensesScreen() {
         }}
       />
 
-      {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={openAdd}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
@@ -196,14 +240,10 @@ export default function ExpensesScreen() {
         onClose={() => { setShowForm(false); setEditingExpense(null); }}
         onSave={handleSave}
         initial={editingExpense ? {
-          date: editingExpense.date,
-          amount: String(editingExpense.amount),
-          category: editingExpense.category,
-          description: editingExpense.description,
-          tags: editingExpense.tags ?? [],
-          attachment: editingExpense.attachment,
-          accountId: editingExpense.accountId,
-          isTaxDeductible: editingExpense.isTaxDeductible,
+          date: editingExpense.date, amount: String(editingExpense.amount),
+          category: editingExpense.category, description: editingExpense.description,
+          tags: editingExpense.tags ?? [], attachment: editingExpense.attachment,
+          accountId: editingExpense.accountId, isTaxDeductible: editingExpense.isTaxDeductible,
           taxDeductionCategory: editingExpense.taxDeductionCategory,
           deductiblePercentage: editingExpense.deductiblePercentage,
           taxRelatedEmployer: editingExpense.taxRelatedEmployer,
@@ -217,164 +257,62 @@ export default function ExpensesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-  },
+  container: { flex: 1, backgroundColor: '#0F172A' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: 'white',
-  },
-  headerSub: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  addBtn: {
-    backgroundColor: '#7C3AED',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  addBtnText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: 'white' },
+  headerSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  iconBtn: { backgroundColor: '#1E293B', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#334155' },
+  iconBtnText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  addBtn: { backgroundColor: '#7C3AED', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  addBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
+  filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
   searchInput: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    color: 'white',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    flex: 1, backgroundColor: '#1E293B', borderRadius: 10, borderWidth: 1, borderColor: '#334155',
+    color: 'white', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
   },
-  sortBtn: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-  sortText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  emptyContainer: {
-    flex: 1,
-  },
+  sortBtn: { backgroundColor: '#1E293B', borderRadius: 10, borderWidth: 1, borderColor: '#334155', paddingHorizontal: 12, justifyContent: 'center' },
+  sortText: { color: '#94A3B8', fontSize: 12, fontWeight: '500' },
+  filterToggleBtn: { backgroundColor: '#1E293B', borderRadius: 10, borderWidth: 1, borderColor: '#334155', width: 40, alignItems: 'center', justifyContent: 'center' },
+  filterToggleBtnActive: { backgroundColor: '#7C3AED22', borderColor: '#7C3AED' },
+  filterToggleText: { color: '#94A3B8', fontSize: 16 },
+  filterToggleTextActive: { color: '#A78BFA' },
+  filterPanel: { marginHorizontal: 16, marginBottom: 10, backgroundColor: '#1E293B', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#334155' },
+  filterLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '600', marginBottom: 5, marginTop: 4 },
+  filterSelect: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0F172A', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#334155' },
+  filterSelectText: { color: 'white', fontSize: 13 },
+  chevron: { color: '#475569', fontSize: 10 },
+  filterDropdown: { backgroundColor: '#0F172A', borderRadius: 8, borderWidth: 1, borderColor: '#334155', marginTop: 4, overflow: 'hidden' },
+  filterDropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#1E293B' },
+  filterDropdownText: { color: '#94A3B8', fontSize: 13 },
+  dateRow: { flexDirection: 'row', gap: 8 },
+  dateInput: { backgroundColor: '#0F172A', borderRadius: 8, borderWidth: 1, borderColor: '#334155', color: 'white', paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
+  clearBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#DC262622', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  clearBtnText: { color: '#F87171', fontSize: 12, fontWeight: '600' },
+  listContent: { paddingHorizontal: 16, paddingBottom: 100 },
+  emptyContainer: { flex: 1 },
   card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    gap: 12,
+    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#1E293B',
+    borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#334155', gap: 12,
   },
-  catIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  catIconText: {
-    fontSize: 20,
-  },
-  cardBody: {
-    flex: 1,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  cardDesc: {
-    flex: 1,
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  cardAmount: {
-    color: '#F87171',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  cardDate: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 6,
-  },
-  tag: {
-    backgroundColor: '#334155',
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  tagText: {
-    color: '#94A3B8',
-    fontSize: 11,
-  },
+  catIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  catIconText: { fontSize: 20 },
+  cardBody: { flex: 1 },
+  cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
+  cardDesc: { flex: 1, color: 'white', fontSize: 15, fontWeight: '600', marginRight: 8 },
+  cardAmount: { color: '#F87171', fontSize: 15, fontWeight: '700' },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  cardDate: { color: '#64748B', fontSize: 12 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 },
+  tag: { backgroundColor: '#334155', borderRadius: 100, paddingHorizontal: 8, paddingVertical: 2 },
+  tagText: { color: '#94A3B8', fontSize: 11 },
   fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7C3AED',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
+    position: 'absolute', bottom: 24, right: 20, width: 56, height: 56,
+    borderRadius: 28, backgroundColor: '#7C3AED', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8,
   },
-  fabText: {
-    color: 'white',
-    fontSize: 28,
-    fontWeight: '300',
-    marginTop: -2,
-  },
+  fabText: { color: 'white', fontSize: 28, fontWeight: '300', marginTop: -2 },
 });
