@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
   View, Text, SafeAreaView, ScrollView, TouchableOpacity,
-  TextInput, StyleSheet, Alert, RefreshControl,
+  TextInput, StyleSheet, Alert, RefreshControl, Linking,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useExpenses } from '../../hooks/useExpenses';
@@ -13,7 +14,10 @@ import { FormField } from '../../components/ui/FormField';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { SUBSCRIPTION_TIERS } from '../../lib/types';
 
+const WEB_APP_URL = 'https://expense-tracker-9e457.web.app';
+
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, logout, updateDisplayName, changePassword, changeEmail, deleteAccount, isEmailProvider } = useAuth();
   const { profile, isLoaded, saveProfile } = useUserProfile();
   const { expenses } = useExpenses();
@@ -207,6 +211,45 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Subscription */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Subscription</Text>
+          <View style={[styles.tierCard, { borderColor: tierInfo.color + '44' }]}>
+            <View style={styles.tierCardLeft}>
+              <Text style={styles.tierCardEmoji}>{tierInfo.emoji}</Text>
+              <View>
+                <Text style={styles.tierCardName}>{tierInfo.label} Plan</Text>
+                <Text style={styles.tierCardSub}>
+                  {tier === 'free' ? 'Upgrade to unlock family & more' :
+                   tier === 'diamond' ? 'Family up to 5 members' : 'Unlimited family members'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/(app)/subscription')}>
+            <Text style={styles.actionLabel}>💎 Manage Subscription</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionRow} onPress={() => Linking.openURL(`${WEB_APP_URL}/subscription`)}>
+            <Text style={styles.actionLabel}>🌐 Manage on Web App</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Family */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Family</Text>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/(app)/family')}>
+            <View>
+              <Text style={styles.actionLabel}>👨‍👩‍👧 Family Members</Text>
+              {tier === 'free' && (
+                <Text style={styles.actionSub}>Requires Diamond or Platinum</Text>
+              )}
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Sign Out */}
         <View style={styles.section}>
           <Button title="Sign Out" variant="outline" onPress={logout} />
@@ -287,4 +330,14 @@ const styles = StyleSheet.create({
   chevron: { color: '#64748B', fontSize: 12 },
   subForm: { paddingTop: 8 },
   deleteWarning: { color: '#EF4444', fontSize: 12, marginBottom: 12, lineHeight: 18 },
+  tierCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#0F172A', borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1,
+  },
+  tierCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tierCardEmoji: { fontSize: 28 },
+  tierCardName: { color: 'white', fontSize: 15, fontWeight: '700' },
+  tierCardSub: { color: '#64748B', fontSize: 12, marginTop: 2 },
+  actionSub: { color: '#475569', fontSize: 11, marginTop: 2 },
 });

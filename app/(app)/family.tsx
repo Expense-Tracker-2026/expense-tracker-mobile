@@ -3,6 +3,7 @@ import {
   View, Text, SafeAreaView, ScrollView, TouchableOpacity,
   RefreshControl, StyleSheet, Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useFamily } from '../../contexts/FamilyContext';
 import { Avatar } from '../../components/ui/Avatar';
 import { FamilyMemberForm } from '../../components/forms/FamilyMemberForm';
@@ -11,6 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import type { FamilyMember } from '../../lib/types';
 
 export default function FamilyScreen() {
+  const router = useRouter();
   const { members, isLoaded, subscriptionTier, isFamilyEnabled, addMember, updateMember, deleteMember } = useFamily();
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -22,11 +24,30 @@ export default function FamilyScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Family</Text>
         </View>
-        <EmptyState
-          icon="💎"
-          title="Diamond or Platinum required"
-          subtitle="Upgrade to Diamond or Platinum to manage family members and split expenses"
-        />
+        <View style={styles.lockedContainer}>
+          <Text style={styles.lockedIcon}>👨‍👩‍👧</Text>
+          <Text style={styles.lockedTitle}>Diamond or Platinum required</Text>
+          <Text style={styles.lockedSubtitle}>
+            Upgrade to track family members, split expenses, and view individual tax summaries.
+          </Text>
+          <View style={styles.tierCards}>
+            <View style={[styles.tierCard, { borderColor: '#3B82F6' }]}>
+              <Text style={styles.tierCardEmoji}>💎</Text>
+              <Text style={styles.tierCardName}>Diamond</Text>
+              <Text style={styles.tierCardDetail}>Up to 5 members</Text>
+              <Text style={[styles.tierCardPrice, { color: '#3B82F6' }]}>$4.99/mo</Text>
+            </View>
+            <View style={[styles.tierCard, { borderColor: '#8B5CF6' }]}>
+              <Text style={styles.tierCardEmoji}>🏆</Text>
+              <Text style={styles.tierCardName}>Platinum</Text>
+              <Text style={styles.tierCardDetail}>Unlimited members</Text>
+              <Text style={[styles.tierCardPrice, { color: '#8B5CF6' }]}>$9.99/mo</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/(app)/subscription')}>
+            <Text style={styles.upgradeBtnText}>View Plans & Upgrade</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -127,4 +148,24 @@ const styles = StyleSheet.create({
   memberRel: { color: '#A78BFA', fontSize: 12, fontWeight: '500', marginTop: 2 },
   memberPhone: { color: '#64748B', fontSize: 12, marginTop: 2 },
   memberDob: { color: '#64748B', fontSize: 12, marginTop: 2 },
+  lockedContainer: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  lockedIcon: { fontSize: 56, marginBottom: 16 },
+  lockedTitle: { color: 'white', fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
+  lockedSubtitle: { color: '#64748B', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  tierCards: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  tierCard: {
+    flex: 1, backgroundColor: '#1E293B', borderRadius: 14, padding: 14,
+    alignItems: 'center', borderWidth: 1.5,
+  },
+  tierCardEmoji: { fontSize: 28, marginBottom: 6 },
+  tierCardName: { color: 'white', fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  tierCardDetail: { color: '#64748B', fontSize: 11, marginBottom: 6 },
+  tierCardPrice: { fontSize: 14, fontWeight: '700' },
+  upgradeBtn: {
+    backgroundColor: '#7C3AED', paddingHorizontal: 32, paddingVertical: 14,
+    borderRadius: 14, width: '100%', alignItems: 'center',
+  },
+  upgradeBtnText: { color: 'white', fontSize: 15, fontWeight: '700' },
 });
