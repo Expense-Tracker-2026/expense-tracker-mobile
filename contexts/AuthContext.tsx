@@ -16,10 +16,11 @@ import {
 } from 'firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { auth } from '../lib/firebase';
+import googleServices from '../google-services.json';
 
-GoogleSignin.configure({
-  webClientId: '958375031325-PLACEHOLDER.apps.googleusercontent.com', // Replace with actual web client ID from Firebase console
-});
+const webClientId = googleServices.client[0].oauth_client.find(c => c.client_type === 3)?.client_id ?? '';
+
+GoogleSignin.configure({ webClientId });
 
 interface AuthContextValue {
   user: User | null;
