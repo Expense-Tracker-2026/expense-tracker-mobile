@@ -8,10 +8,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useIncome } from '../../hooks/useIncome';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { FormField } from '../../components/ui/FormField';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { SUBSCRIPTION_TIERS } from '../../lib/types';
 
 const WEB_APP_URL = 'https://expense-tracker-9e457.web.app';
@@ -44,6 +46,8 @@ export default function ProfileScreen() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deletePw, setDeletePw] = useState('');
+
+  const { colors, theme } = useTheme();
 
   if (!isLoaded) return <LoadingSpinner />;
 
@@ -97,38 +101,38 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setTimeout(() => setRefreshing(false), 800); }} tintColor="#7C3AED" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setTimeout(() => setRefreshing(false), 800); }} tintColor={colors.refreshTint} />}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Header */}
-        <View style={styles.profileHeader}>
+        <View style={[styles.profileHeader, { borderBottomColor: colors.border }]}>
           <Avatar name={profile?.displayName || user?.email || '?'} color={profile?.avatarColor ?? '#7C3AED'} size={80} />
-          <Text style={styles.displayName}>{profile?.displayName || 'User'}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
+          <Text style={[styles.displayName, { color: colors.text }]}>{profile?.displayName || 'User'}</Text>
+          <Text style={[styles.email, { color: colors.textMuted }]}>{user?.email}</Text>
           <View style={styles.tierBadge}>
             <Text style={styles.tierText}>{tierInfo.emoji} {tierInfo.label}</Text>
           </View>
         </View>
 
         {/* Stats */}
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{expenses.length}</Text>
-            <Text style={styles.statLabel}>Expenses</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{expenses.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Expenses</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{income.length}</Text>
-            <Text style={styles.statLabel}>Income</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{income.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Income</Text>
           </View>
         </View>
 
         {/* Personal Info */}
-        <View style={styles.section}>
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Personal Info</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Personal Info</Text>
             <TouchableOpacity onPress={() => editing ? handleSaveProfile() : setEditing(true)}>
               <Text style={styles.editBtn}>{editing ? (saving ? 'Saving...' : 'Save') : 'Edit'}</Text>
             </TouchableOpacity>
@@ -176,10 +180,10 @@ export default function ProfileScreen() {
 
         {/* Security */}
         {isEmailProvider && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Security</Text>
+          <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Security</Text>
             <TouchableOpacity style={styles.actionRow} onPress={() => setShowChangePassword(!showChangePassword)}>
-              <Text style={styles.actionLabel}>🔑 Change Password</Text>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>🔑 Change Password</Text>
               <Text style={styles.chevron}>{showChangePassword ? '▲' : '▼'}</Text>
             </TouchableOpacity>
             {showChangePassword && (
@@ -194,7 +198,7 @@ export default function ProfileScreen() {
               </View>
             )}
             <TouchableOpacity style={styles.actionRow} onPress={() => setShowChangeEmail(!showChangeEmail)}>
-              <Text style={styles.actionLabel}>✉️ Change Email</Text>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>✉️ Change Email</Text>
               <Text style={styles.chevron}>{showChangeEmail ? '▲' : '▼'}</Text>
             </TouchableOpacity>
             {showChangeEmail && (
@@ -212,14 +216,14 @@ export default function ProfileScreen() {
         )}
 
         {/* Subscription */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Subscription</Text>
-          <View style={[styles.tierCard, { borderColor: tierInfo.color + '44' }]}>
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Subscription</Text>
+          <View style={[styles.tierCard, { borderColor: tierInfo.color + '44', backgroundColor: colors.bgSecondary }]}>
             <View style={styles.tierCardLeft}>
               <Text style={styles.tierCardEmoji}>{tierInfo.emoji}</Text>
               <View>
-                <Text style={styles.tierCardName}>{tierInfo.label} Plan</Text>
-                <Text style={styles.tierCardSub}>
+                <Text style={[styles.tierCardName, { color: colors.text }]}>{tierInfo.label} Plan</Text>
+                <Text style={[styles.tierCardSub, { color: colors.textMuted }]}>
                   {tier === 'free' ? 'Upgrade to unlock family & more' :
                    tier === 'diamond' ? 'Family up to 5 members' : 'Unlimited family members'}
                 </Text>
@@ -227,21 +231,21 @@ export default function ProfileScreen() {
             </View>
           </View>
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/(app)/subscription')}>
-            <Text style={styles.actionLabel}>💎 Manage Subscription</Text>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={[styles.actionLabel, { color: colors.text }]}>💎 Manage Subscription</Text>
+            <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionRow} onPress={() => Linking.openURL(`${WEB_APP_URL}/subscription`)}>
-            <Text style={styles.actionLabel}>🌐 Manage on Web App</Text>
+            <Text style={[styles.actionLabel, { color: colors.text }]}>🌐 Manage on Web App</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Family */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Family</Text>
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Family</Text>
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/(app)/family')}>
             <View>
-              <Text style={styles.actionLabel}>👨‍👩‍👧 Family Members</Text>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>👨‍👩‍👧 Family Members</Text>
               {tier === 'free' && (
                 <Text style={styles.actionSub}>Requires Diamond or Platinum</Text>
               )}
@@ -250,13 +254,19 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Appearance */}
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+          <ThemeToggle />
+        </View>
+
         {/* Sign Out */}
-        <View style={styles.section}>
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <Button title="Sign Out" variant="outline" onPress={logout} />
         </View>
 
         {/* Danger Zone */}
-        <View style={[styles.section, styles.dangerSection]}>
+        <View style={[styles.section, styles.dangerSection, { backgroundColor: colors.bgCard }]}>
           <Text style={[styles.sectionTitle, { color: '#EF4444' }]}>Danger Zone</Text>
           <TouchableOpacity style={styles.actionRow} onPress={() => setShowDelete(!showDelete)}>
             <Text style={[styles.actionLabel, { color: '#EF4444' }]}>🗑️ Delete Account</Text>
@@ -283,14 +293,14 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F172A' },
+  container: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
   profileHeader: {
     alignItems: 'center', paddingTop: 24, paddingBottom: 20,
-    borderBottomWidth: 1, borderBottomColor: '#1E293B',
+    borderBottomWidth: 1,
   },
-  displayName: { color: 'white', fontSize: 22, fontWeight: '800', marginTop: 12 },
-  email: { color: '#64748B', fontSize: 13, marginTop: 4 },
+  displayName: { fontSize: 22, fontWeight: '800', marginTop: 12 },
+  email: { fontSize: 13, marginTop: 4 },
   tierBadge: {
     marginTop: 10, paddingHorizontal: 14, paddingVertical: 6,
     backgroundColor: '#7C3AED22', borderRadius: 20, borderWidth: 1, borderColor: '#7C3AED44',
@@ -299,45 +309,42 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginTop: 16,
-    backgroundColor: '#1E293B', borderRadius: 16, padding: 20,
-    borderWidth: 1, borderColor: '#334155',
+    borderRadius: 16, padding: 20, borderWidth: 1,
   },
   statItem: { flex: 1, alignItems: 'center' },
-  statValue: { color: 'white', fontSize: 24, fontWeight: '800' },
-  statLabel: { color: '#64748B', fontSize: 12, marginTop: 4 },
-  statDivider: { width: 1, height: 40, backgroundColor: '#334155', marginHorizontal: 8 },
+  statValue: { fontSize: 24, fontWeight: '800' },
+  statLabel: { fontSize: 12, marginTop: 4 },
+  statDivider: { width: 1, height: 40, marginHorizontal: 8 },
   section: {
     marginHorizontal: 16, marginTop: 16,
-    backgroundColor: '#1E293B', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#334155',
+    borderRadius: 16, padding: 16, borderWidth: 1,
   },
   dangerSection: { borderColor: '#EF444422' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  sectionTitle: { color: 'white', fontSize: 16, fontWeight: '700' },
+  sectionTitle: { fontSize: 16, fontWeight: '700' },
   editBtn: { color: '#A78BFA', fontSize: 14, fontWeight: '600' },
-  infoRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155' },
+  infoRow: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#33415540' },
   infoLabel: { width: 90, color: '#64748B', fontSize: 13 },
-  infoValue: { flex: 1, color: 'white', fontSize: 13 },
+  infoValue: { flex: 1, fontSize: 13 },
   input: {
-    backgroundColor: '#0F172A', borderRadius: 10, borderWidth: 1, borderColor: '#334155',
-    padding: 14, color: 'white', fontSize: 15,
+    borderRadius: 10, borderWidth: 1,
+    padding: 14, fontSize: 15,
   },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
   btnRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
   btnFlex: { flex: 1 },
   actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
-  actionLabel: { color: 'white', fontSize: 15 },
-  chevron: { color: '#64748B', fontSize: 12 },
+  actionLabel: { fontSize: 15 },
+  chevron: { fontSize: 12 },
   subForm: { paddingTop: 8 },
   deleteWarning: { color: '#EF4444', fontSize: 12, marginBottom: 12, lineHeight: 18 },
   tierCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#0F172A', borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1,
+    borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1,
   },
   tierCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   tierCardEmoji: { fontSize: 28 },
-  tierCardName: { color: 'white', fontSize: 15, fontWeight: '700' },
-  tierCardSub: { color: '#64748B', fontSize: 12, marginTop: 2 },
+  tierCardName: { fontSize: 15, fontWeight: '700' },
+  tierCardSub: { fontSize: 12, marginTop: 2 },
   actionSub: { color: '#475569', fontSize: 11, marginTop: 2 },
 });

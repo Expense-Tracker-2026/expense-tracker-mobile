@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrencyProvider } from '../contexts/CurrencyContext';
 import { FamilyProvider } from '../contexts/FamilyContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
 import '../global.css';
 
 function RootLayoutNav() {
@@ -19,13 +20,15 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <CurrencyProvider>
-            <FamilyProvider>
-              <RootLayoutNav />
-            </FamilyProvider>
-          </CurrencyProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <CurrencyProvider>
+              <FamilyProvider>
+                <RootLayoutNav />
+              </FamilyProvider>
+            </CurrencyProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

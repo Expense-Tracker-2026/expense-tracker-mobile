@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Text } from 'react-native';
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
+  const { colors } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
@@ -17,9 +19,9 @@ export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarStyle: { backgroundColor: '#0F172A', borderTopColor: '#1E293B' },
-        tabBarActiveTintColor: '#7C3AED',
-        tabBarInactiveTintColor: '#475569',
+        tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.tabBorder },
+        tabBarActiveTintColor: colors.brand,
+        tabBarInactiveTintColor: colors.textMuted,
         headerShown: false,
       }}
     >
