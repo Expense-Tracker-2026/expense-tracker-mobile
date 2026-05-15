@@ -3,6 +3,7 @@ import {
   View, Text, SafeAreaView, ScrollView, TouchableOpacity,
   TextInput, StyleSheet, Alert, RefreshControl, Linking,
 } from 'react-native';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUserProfile } from '../../hooks/useUserProfile';
@@ -189,10 +190,10 @@ export default function ProfileScreen() {
             {showChangePassword && (
               <View style={styles.subForm}>
                 <FormField label="Current Password">
-                  <TextInput style={styles.input} value={currentPw} onChangeText={setCurrentPw} secureTextEntry placeholderTextColor="#475569" placeholder="••••••••" />
+                  <PasswordInput inputStyle={styles.input} value={currentPw} onChangeText={setCurrentPw} placeholderTextColor="#475569" placeholder="••••••••" />
                 </FormField>
                 <FormField label="New Password">
-                  <TextInput style={styles.input} value={newPw} onChangeText={setNewPw} secureTextEntry placeholderTextColor="#475569" placeholder="••••••••" />
+                  <PasswordInput inputStyle={styles.input} value={newPw} onChangeText={setNewPw} placeholderTextColor="#475569" placeholder="••••••••" />
                 </FormField>
                 <Button title="Change Password" onPress={handleChangePassword} />
               </View>
@@ -204,7 +205,7 @@ export default function ProfileScreen() {
             {showChangeEmail && (
               <View style={styles.subForm}>
                 <FormField label="Current Password">
-                  <TextInput style={styles.input} value={currentPwEmail} onChangeText={setCurrentPwEmail} secureTextEntry placeholderTextColor="#475569" placeholder="••••••••" />
+                  <PasswordInput inputStyle={styles.input} value={currentPwEmail} onChangeText={setCurrentPwEmail} placeholderTextColor="#475569" placeholder="••••••••" />
                 </FormField>
                 <FormField label="New Email">
                   <TextInput style={styles.input} value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" placeholderTextColor="#475569" placeholder="new@email.com" />
@@ -280,7 +281,7 @@ export default function ProfileScreen() {
               </FormField>
               {isEmailProvider && (
                 <FormField label="Your Password">
-                  <TextInput style={styles.input} value={deletePw} onChangeText={setDeletePw} secureTextEntry placeholderTextColor="#475569" placeholder="••••••••" />
+                  <PasswordInput inputStyle={styles.input} value={deletePw} onChangeText={setDeletePw} placeholderTextColor="#475569" placeholder="••••••••" />
                 </FormField>
               )}
               <Button title="Delete My Account" variant="danger" onPress={handleDeleteAccount} />

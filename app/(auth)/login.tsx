@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
+  View, Text, TouchableOpacity, ScrollView,
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 
 export default function LoginScreen() {
   const { signInEmail, signInGoogle } = useAuth();
@@ -74,13 +75,12 @@ export default function LoginScreen() {
 
         <View style={{ marginBottom: 24 }}>
           <Text style={{ color: '#94A3B8', marginBottom: 8, fontSize: 14 }}>Password</Text>
-          <TextInput
-            style={{ backgroundColor: '#1E293B', color: 'white', borderRadius: 12, padding: 16, fontSize: 16, borderWidth: 1, borderColor: '#334155' }}
+          <PasswordInput
+            inputStyle={{ backgroundColor: '#1E293B', color: 'white', borderRadius: 12, padding: 16, fontSize: 16, borderWidth: 1, borderColor: '#334155' }}
             value={password}
             onChangeText={setPassword}
             placeholder="••••••••"
             placeholderTextColor="#475569"
-            secureTextEntry
           />
         </View>
 
