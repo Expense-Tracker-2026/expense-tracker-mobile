@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithCredential,
+  linkWithCredential,
   GoogleAuthProvider,
   signOut,
   updateProfile,
@@ -13,6 +14,7 @@ import {
   EmailAuthProvider,
   deleteUser,
   type User,
+  type OAuthCredential,
 } from 'firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { auth } from '../lib/firebase';
@@ -22,12 +24,20 @@ const webClientId = googleServices.client[0].oauth_client.find(c => c.client_typ
 
 GoogleSignin.configure({ webClientId });
 
+export class AccountLinkError extends Error {
+  constructor(public readonly email: string, public readonly pendingCredential: OAuthCredential) {
+    super('account-exists-with-different-credential');
+    this.name = 'AccountLinkError';
+  }
+}
+
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signInEmail: (email: string, password: string) => Promise<void>;
   signUpEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   signInGoogle: () => Promise<void>;
+  linkGoogleToEmailAccount: (email: string, password: string, pendingCredential: OAuthCredential) => Promise<void>;
   logout: () => Promise<void>;
   updateDisplayName: (name: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -69,7 +79,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data } = await GoogleSignin.signIn();
     if (!data?.idToken) throw new Error('No ID token from Google');
     const credential = GoogleAuthProvider.credential(data.idToken);
-    await signInWithCredential(auth, credential);
+    try {
+      await signInWithCredential(auth, credential);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'auth/account-exists-with-different-credential') {
+        const email = (err as { customData?: { email?: string } })?.customData?.email ?? '';
+        if (email) throw new AccountLinkError(email, credential);
+      }
+      throw err;
+    }
+  }
+
+  async function linkGoogleToEmailAccount(email: string, password: string, pendingCredential: OAuthCredential) {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    await linkWithCredential(result.user, pendingCredential);
   }
 
   async function logout() {
@@ -110,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, loading,
-      signInEmail, signUpEmail, signInGoogle, logout,
+      signInEmail, signUpEmail, signInGoogle, linkGoogleToEmailAccount, logout,
       updateDisplayName, changePassword, changeEmail, deleteAccount,
       isEmailProvider,
     }}>
