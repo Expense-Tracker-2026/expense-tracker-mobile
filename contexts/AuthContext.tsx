@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithCredential,
   linkWithCredential,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   signOut,
   updateProfile,
@@ -38,6 +39,7 @@ interface AuthContextValue {
   signUpEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   signInGoogle: () => Promise<void>;
   linkGoogleToEmailAccount: (email: string, password: string, pendingCredential: OAuthCredential) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   updateDisplayName: (name: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -96,6 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await linkWithCredential(result.user, pendingCredential);
   }
 
+  async function sendPasswordReset(email: string) {
+    await sendPasswordResetEmail(auth, email);
+  }
+
   async function logout() {
     await signOut(auth);
     try { await GoogleSignin.signOut(); } catch { /* ignore */ }
@@ -134,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, loading,
-      signInEmail, signUpEmail, signInGoogle, linkGoogleToEmailAccount, logout,
+      signInEmail, signUpEmail, signInGoogle, linkGoogleToEmailAccount, sendPasswordReset, logout,
       updateDisplayName, changePassword, changeEmail, deleteAccount,
       isEmailProvider,
     }}>
