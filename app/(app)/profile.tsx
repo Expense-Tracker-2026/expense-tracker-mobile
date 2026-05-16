@@ -21,7 +21,7 @@ const WEB_APP_URL = 'https://expense-tracker-9e457.web.app';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout, updateDisplayName, changePassword, changeEmail, deleteAccount, isEmailProvider } = useAuth();
+  const { user, logout, updateDisplayName, changePassword, changeEmail, deleteAccount, sendPasswordReset, isEmailProvider } = useAuth();
   const { profile, isLoaded, saveProfile } = useUserProfile();
   const { expenses } = useExpenses();
   const { income } = useIncome();
@@ -42,6 +42,24 @@ export default function ProfileScreen() {
   const [showChangeEmail, setShowChangeEmail] = useState(false);
   const [currentPwEmail, setCurrentPwEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
+
+  // Login methods
+  const isGoogleProvider = !!(user?.providerData?.some(p => p.providerId === 'google.com'));
+  const [setupPwSent, setSetupPwSent] = useState(false);
+  const [setupPwSending, setSetupPwSending] = useState(false);
+
+  async function handleSetupPassword() {
+    if (!user?.email) return;
+    setSetupPwSending(true);
+    try {
+      await sendPasswordReset(user.email);
+      setSetupPwSent(true);
+    } catch {
+      Alert.alert('Error', 'Could not send setup email.');
+    } finally {
+      setSetupPwSending(false);
+    }
+  }
 
   // Delete account
   const [showDelete, setShowDelete] = useState(false);
@@ -259,6 +277,39 @@ export default function ProfileScreen() {
         <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
           <ThemeToggle />
+        </View>
+
+        {/* Login Methods */}
+        <View style={[styles.section, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Login Methods</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 12 }}>Link both methods so you can sign in with either one.</Text>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View>
+              <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Google</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{isGoogleProvider ? 'Connected' : 'Not connected'}</Text>
+            </View>
+            {isGoogleProvider
+              ? <View style={{ backgroundColor: '#ECFDF5', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}><Text style={{ color: '#065F46', fontSize: 12, fontWeight: '600' }}>Connected</Text></View>
+              : <Text style={{ color: '#94A3B8', fontSize: 12 }}>Sign in with Google to link</Text>
+            }
+          </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 }}>
+            <View>
+              <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Email &amp; Password</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{isEmailProvider ? 'Connected' : 'Not connected'}</Text>
+            </View>
+            {isEmailProvider
+              ? <View style={{ backgroundColor: '#ECFDF5', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}><Text style={{ color: '#065F46', fontSize: 12, fontWeight: '600' }}>Connected</Text></View>
+              : setupPwSent
+                ? <Text style={{ color: '#059669', fontSize: 12 }}>Email sent ✓</Text>
+                : <TouchableOpacity onPress={handleSetupPassword} disabled={setupPwSending} style={{ backgroundColor: '#7C3AED', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
+                    <Text style={{ color: 'white', fontSize: 12, fontWeight: '600' }}>{setupPwSending ? 'Sending…' : 'Set up password'}</Text>
+                  </TouchableOpacity>
+            }
+          </View>
+          {setupPwSent && <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>Check your inbox and follow the link to set your password.</Text>}
         </View>
 
         {/* Sign Out */}

@@ -11,7 +11,7 @@ import type { OAuthCredential } from 'firebase/auth';
 type LinkPending = { email: string; credential: OAuthCredential };
 
 export default function LoginScreen() {
-  const { signInEmail, signInGoogle, linkGoogleToEmailAccount } = useAuth();
+  const { signInEmail, signInGoogle, linkGoogleToEmailAccount, sendPasswordReset } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,6 +19,7 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [linkPending, setLinkPending] = useState<LinkPending | null>(null);
   const [linkPassword, setLinkPassword] = useState('');
+  const [resetSent, setResetSent] = useState(false);
 
   async function handleSignIn() {
     if (!email || !password) { setError('Please fill in all fields'); return; }
@@ -28,7 +29,19 @@ export default function LoginScreen() {
       await signInEmail(email.trim(), password);
       router.replace('/(app)');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Sign in failed');
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('wrong-password') || msg.includes('invalid-credential')) {
+        // May be a Google-only account — auto-send password setup email
+        try {
+          await sendPasswordReset(email.trim());
+          setResetSent(true);
+          setError('');
+        } catch {
+          setError('Invalid email or password.');
+        }
+      } else {
+        setError(msg.includes('user-not-found') ? 'No account found with this email.' : 'Sign in failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -144,6 +157,12 @@ export default function LoginScreen() {
           <Text style={{ color: '#94A3B8', marginTop: 4 }}>Sign in to your account</Text>
         </View>
 
+        {resetSent ? (
+          <View style={{ backgroundColor: '#ECFDF5', borderRadius: 8, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#6EE7B7' }}>
+            <Text style={{ color: '#065F46', fontSize: 14 }}>Check your inbox — we sent a link to set up your password. Once done, sign in here with email and password.</Text>
+          </View>
+        ) : null}
+
         {error ? (
           <View style={{ backgroundColor: '#FEE2E2', borderRadius: 8, padding: 12, marginBottom: 16 }}>
             <Text style={{ color: '#DC2626', fontSize: 14 }}>{error}</Text>
@@ -164,7 +183,16 @@ export default function LoginScreen() {
         </View>
 
         <View style={{ marginBottom: 24 }}>
-          <Text style={{ color: '#94A3B8', marginBottom: 8, fontSize: 14 }}>Password</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ color: '#94A3B8', fontSize: 14 }}>Password</Text>
+            <TouchableOpacity onPress={async () => {
+              if (!email.trim()) { setError('Enter your email first'); return; }
+              try { await sendPasswordReset(email.trim()); setResetSent(true); setError(''); }
+              catch { setError('Could not send reset email.'); }
+            }}>
+              <Text style={{ color: '#7C3AED', fontSize: 12 }}>Forgot / set up password?</Text>
+            </TouchableOpacity>
+          </View>
           <PasswordInput
             inputStyle={{ backgroundColor: '#1E293B', color: 'white', borderRadius: 12, padding: 16, fontSize: 16, borderWidth: 1, borderColor: '#334155' }}
             value={password}
